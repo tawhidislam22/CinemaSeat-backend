@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
+import html2canvas from 'html2canvas';
 
 interface Ticket {
   id: string;
@@ -39,7 +40,7 @@ export default function Dashboard() {
     async function fetchTickets() {
       try {
         const user = JSON.parse(userData as string) as { id: string };
-        const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+        const url = process.env.NEXT_PUBLIC_BOOKINGS_URL || 'http://localhost:3003';
         const response = await fetch(`${url}/bookings/my-tickets?userId=${user.id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -64,7 +65,25 @@ export default function Dashboard() {
     }
 
     fetchTickets();
+    const interval = setInterval(fetchTickets, 3000);
+    return () => clearInterval(interval);
   }, [router]);
+
+  const handleDownloadTicket = async (ticketId: string, movieTitle: string) => {
+    const element = document.getElementById(`ticket-${ticketId}`);
+    if (!element) return;
+    
+    try {
+      const canvas = await html2canvas(element, { backgroundColor: '#001232', scale: 2 });
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `${movieTitle.replace(/\s+/g, '_')}_Ticket.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error('Failed to download ticket', err);
+    }
+  };
 
   return (
     <div className="dashboard-page">
@@ -114,8 +133,8 @@ export default function Dashboard() {
             </div>
             <div className="tickets-list">
               {tickets.map((ticket) => (
-                <article key={ticket.id} className="cinema-ticket">
-                  <img src={ticket.poster_url} alt="" className="cinema-ticket-poster" />
+                <article id={`ticket-${ticket.id}`} key={ticket.id} className="cinema-ticket">
+                  <img src={ticket.poster_url} alt="" className="cinema-ticket-poster" crossOrigin="anonymous" />
                   <div className="cinema-ticket-main">
                     <div className="ticket-topline">
                       <span className="status-badge confirmed">{ticket.status || 'Confirmed'}</span>
@@ -136,6 +155,13 @@ export default function Dashboard() {
                       <QRCodeSVG value={ticket.booking_ref} size={116} bgColor="#ffffff" fgColor="#001232" level="H" />
                     </div>
                     <span>Scan at entrance</span>
+                    <button 
+                      onClick={() => handleDownloadTicket(ticket.id, ticket.movie_title)} 
+                      className="btn btn-secondary" 
+                      style={{ marginTop: '15px', padding: '8px 12px', fontSize: '0.75rem' }}
+                    >
+                      ↓ Download Ticket
+                    </button>
                   </div>
                 </article>
               ))}

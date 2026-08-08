@@ -3,12 +3,17 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -17,18 +22,41 @@ const pool = new Pool({
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://gateway:9000';
 const CALLBACK_URL = process.env.CALLBACK_URL || 'http://gateway:80/webhooks/payment';
 const BOOKINGS_SERVICE_URL = process.env.BOOKINGS_SERVICE_URL || 'http://bookings-service:3000';
+const OTP_SERVICE_URL = process.env.OTP_SERVICE_URL || 'http://otp-service:3000';
+const OTP_INTERNAL_SECRET = process.env.OTP_INTERNAL_SECRET || 'cinemaseat-internal-otp';
+const MOCK_GATEWAY_MODE = process.env.MOCK_GATEWAY_MODE || '';
 
 app.post('/payments/charge', async (req, res) => {
-  const { bookingRef } = req.body;
-  if (!bookingRef) return res.status(400).json({ error: 'Missing bookingRef' });
+  const { bookingRef, otpCode } = req.body;
+  if (!bookingRef || !otpCode) return res.status(400).json({ error: 'Missing bookingRef or payment OTP' });
 
   const client = await pool.connect();
   try {
-    const bookingRes = await client.query('SELECT * FROM bookings WHERE booking_ref = $1', [bookingRef]);
+    const bookingRes = await client.query(`
+      SELECT b.*, ss.status AS seat_status, ss.held_until
+      FROM bookings b
+      JOIN seat_status ss ON ss.show_id = b.show_id AND ss.seat_id = b.seat_id
+      WHERE b.booking_ref = $1
+    `, [bookingRef]);
     if (bookingRes.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
     const booking = bookingRes.rows[0];
 
     if (booking.status !== 'HELD') return res.status(400).json({ error: 'Booking is not in HELD state' });
+    if (booking.seat_status !== 'HELD' || !booking.held_until || new Date(booking.held_until) <= new Date()) {
+      return res.status(410).json({ error: 'Seat hold expired before payment was completed' });
+    }
+
+    // Payment OTP is verified here, not in the browser, so /payments/charge
+    // cannot be called directly to bypass the OTP step.
+    const otpResponse = await fetch(`${OTP_SERVICE_URL}/otp/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': OTP_INTERNAL_SECRET || '' },
+      body: JSON.stringify({ ref: bookingRef, code: otpCode, purpose: 'PAYMENT' })
+    });
+    const otpData = await otpResponse.json();
+    if (!otpResponse.ok || otpData.purpose !== 'PAYMENT') {
+      return res.status(400).json({ error: otpData.error || 'Invalid payment OTP' });
+    }
 
     await client.query('BEGIN');
     await client.query(`UPDATE bookings SET status = 'PENDING_PAYMENT' WHERE id = $1`, [booking.id]);
@@ -41,12 +69,18 @@ app.post('/payments/charge', async (req, res) => {
     `, [booking.id, idempotencyKey, booking.amount]);
     await client.query('COMMIT');
 
-    const gatewayRes = await fetch(`${GATEWAY_URL}/payments/charge`, {
+    const gatewayHeaders = {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey
+    };
+    const requestedMode = req.get('X-Mock-Mode') || MOCK_GATEWAY_MODE;
+    const requestedForce = req.get('X-Mock-Force');
+    if (requestedMode) gatewayHeaders['X-Mock-Mode'] = requestedMode;
+    if (requestedForce) gatewayHeaders['X-Mock-Force'] = requestedForce;
+
+    const gatewayRes = await fetch(`${GATEWAY_URL}/charge`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Idempotency-Key': idempotencyKey
-      },
+      headers: gatewayHeaders,
       body: JSON.stringify({
         amount: booking.amount,
         currency: 'BDT',
@@ -73,6 +107,19 @@ app.post('/payments/charge', async (req, res) => {
 
 // Webhook for gateway
 app.post('/webhooks/payment', async (req, res) => {
+  const signature = req.get('X-Signature');
+  if (!signature) {
+    return res.status(401).json({ error: 'Missing signature' });
+  }
+
+  const secret = process.env.GATEWAY_SECRET || 'z2p-2026-secret';
+  const expectedSig = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+  
+  if (signature !== expectedSig) {
+    console.error('Invalid webhook signature!');
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
   const { event_id, payment_id, booking_ref, status, amount } = req.body;
   if (!event_id || !booking_ref || !status) {
     return res.status(400).json({ error: 'Missing webhook payload fields' });

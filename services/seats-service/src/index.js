@@ -11,6 +11,17 @@ app.use(express.json());
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: parseInt(process.env.DB_POOL_MAX || '10', 10),
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  keepAlive: true,
+});
+
+// Idle PostgreSQL connections can be closed by the network or a managed
+// database pooler. pg removes that client automatically; handling the event
+// prevents an otherwise unhandled pool error from terminating this process.
+pool.on('error', (err) => {
+  console.error('Unexpected idle database connection error:', err.message);
 });
 
 const HOLD_TTL_SECONDS = parseInt(process.env.HOLD_TTL_SECONDS || '120', 10);
@@ -42,8 +53,56 @@ app.post('/seats/hold', async (req, res) => {
     return res.status(400).json({ error: 'Missing parameters' });
   }
 
+  let client;
   try {
-    const updateResult = await pool.query(`
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    // Serialize hold attempts for this user. This prevents two tabs (or two
+    // simultaneous requests) from holding different seats for the same user.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [userId]);
+
+    const expiredResult = await client.query(`
+      UPDATE seat_status
+      SET status = 'AVAILABLE', held_by = NULL, held_until = NULL,
+          version = version + 1
+      WHERE status = 'HELD' AND held_until <= now()
+      RETURNING seat_id, show_id
+    `);
+    for (const expired of expiredResult.rows) {
+      await client.query(`
+        UPDATE bookings SET status = 'EXPIRED'
+        WHERE seat_id = $1 AND show_id = $2
+          AND status IN ('HELD', 'PENDING_PAYMENT')
+      `, [expired.seat_id, expired.show_id]);
+    }
+
+    const activeHold = await client.query(`
+      SELECT seat_id, show_id, held_until
+      FROM seat_status
+      WHERE held_by = $1 AND status = 'HELD' AND held_until > now()
+      LIMIT 1
+      FOR UPDATE
+    `, [userId]);
+
+    if (activeHold.rows.length > 0) {
+      const hold = activeHold.rows[0];
+      if (String(hold.seat_id) !== String(seatId) || String(hold.show_id) !== String(showId)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'You already have a seat on hold. Complete that booking or wait for the timer to expire.',
+          code: 'USER_ALREADY_HAS_HOLD',
+          seatId: hold.seat_id,
+          showId: hold.show_id,
+          heldUntil: hold.held_until
+        });
+      }
+    }
+
+    let heldUntil = activeHold.rows[0]?.held_until;
+    let alreadyHeld = activeHold.rows.length > 0;
+    if (!alreadyHeld) {
+      const updateResult = await client.query(`
       UPDATE seat_status
       SET status = 'HELD', held_by = $1, held_until = now() + ($2 || ' seconds')::interval,
           version = version + 1
@@ -51,19 +110,30 @@ app.post('/seats/hold', async (req, res) => {
       RETURNING seat_id, held_until;
     `, [userId, HOLD_TTL_SECONDS, seatId, showId]);
 
-    if (updateResult.rows.length === 0) {
-      return res.status(409).json({ error: 'Seat not available' });
+      if (updateResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Seat not available', code: 'SEAT_NOT_AVAILABLE' });
+      }
+      heldUntil = updateResult.rows[0].held_until;
     }
     
     // Also need to get seat price info for the orchestrator
-    const showInfo = await pool.query('SELECT base_price FROM shows WHERE id = $1', [showId]);
-    const seatInfo = await pool.query('SELECT price_multiplier FROM seats WHERE id = $1', [seatId]);
+    const showInfo = await client.query('SELECT base_price FROM shows WHERE id = $1', [showId]);
+    const seatInfo = await client.query('SELECT price_multiplier FROM seats WHERE id = $1', [seatId]);
+    if (showInfo.rows.length === 0 || seatInfo.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Show or seat not found' });
+    }
     const amount = parseFloat(showInfo.rows[0].base_price) * parseFloat(seatInfo.rows[0].price_multiplier);
 
-    res.json({ success: true, heldUntil: updateResult.rows[0].held_until, amount });
+    await client.query('COMMIT');
+    res.json({ success: true, heldUntil, amount, alreadyHeld });
   } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client?.release();
   }
 });
 
@@ -97,26 +167,48 @@ app.post('/seats/confirm', async (req, res) => {
   }
 });
 
-// Sweeper
-setInterval(async () => {
+// Run one sweep at a time. setTimeout is scheduled only after the previous
+// sweep finishes, so a slow/reconnecting database cannot create overlapping
+// cleanup jobs.
+const SWEEP_INTERVAL_MS = parseInt(process.env.SWEEP_INTERVAL_MS || '10000', 10);
+
+async function sweepExpiredHolds() {
   try {
     const result = await pool.query(`
-      UPDATE seat_status
-      SET status = 'AVAILABLE', held_by = NULL, held_until = NULL
-      WHERE status = 'HELD' AND held_until < now()
-      RETURNING seat_id, show_id;
+      WITH expired_holds AS (
+        UPDATE seat_status
+        SET status = 'AVAILABLE', held_by = NULL, held_until = NULL,
+            version = version + 1
+        WHERE status = 'HELD' AND held_until <= now()
+        RETURNING seat_id, show_id
+      ), expired_bookings AS (
+        UPDATE bookings b
+        SET status = 'EXPIRED'
+        FROM expired_holds h
+        WHERE b.seat_id = h.seat_id
+          AND b.show_id = h.show_id
+          AND b.status IN ('HELD', 'PENDING_PAYMENT')
+        RETURNING b.id
+      )
+      SELECT
+        (SELECT count(*)::int FROM expired_holds) AS expired_holds,
+        (SELECT count(*)::int FROM expired_bookings) AS expired_bookings
     `);
-    if (result.rowCount > 0) {
-      console.log(`Swept ${result.rowCount} expired holds.`);
-      // Expire the stale bookings directly to prevent unique constraint violations on re-booking
-      for (const row of result.rows) {
-        await pool.query(`UPDATE bookings SET status = 'EXPIRED' WHERE seat_id = $1 AND show_id = $2 AND status = 'HELD'`, [row.seat_id, row.show_id]);
-      }
+
+    const counts = result.rows[0];
+    if (counts.expired_holds > 0) {
+      console.log(`Swept ${counts.expired_holds} expired holds and ${counts.expired_bookings} bookings.`);
     }
   } catch (err) {
-    console.error('Sweeper error:', err);
+    // A later run obtains a fresh client from the pool and retries cleanup.
+    // Expiry remains safe because the UPDATE only targets currently HELD rows.
+    console.error('Sweeper database error; will retry:', err.message);
+  } finally {
+    setTimeout(sweepExpiredHolds, SWEEP_INTERVAL_MS);
   }
-}, 10000);
+}
+
+setTimeout(sweepExpiredHolds, SWEEP_INTERVAL_MS);
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
