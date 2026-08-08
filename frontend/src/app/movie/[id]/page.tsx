@@ -4,6 +4,14 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 
+function requireArray(payload: unknown, resource: string): any[] {
+  if (Array.isArray(payload)) return payload;
+  const message = payload && typeof payload === 'object' && 'error' in payload
+    ? String((payload as { error: unknown }).error)
+    : `${resource} returned an unexpected response`;
+  throw new Error(message);
+}
+
 export default function UnifiedMovieBooking() {
   const params = useParams();
   const router = useRouter();
@@ -12,6 +20,7 @@ export default function UnifiedMovieBooking() {
   // -- Selection State --
   const [shows, setShows] = useState<any[]>([]);
   const [loadingShows, setLoadingShows] = useState(true);
+  const [showsError, setShowsError] = useState('');
   
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [selectedTheatre, setSelectedTheatre] = useState<string | null>(null);
@@ -45,12 +54,19 @@ export default function UnifiedMovieBooking() {
     if (!movieId) return;
     const fetchShows = async () => {
       try {
+        setShowsError('');
         const url = process.env.NEXT_PUBLIC_CATALOG_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
         const res = await fetch(`${url}/catalog/shows/${movieId}`);
-        const data = await res.json();
-        setShows(data);
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          const detail = data && typeof data === 'object' && 'error' in data ? String(data.error) : `HTTP ${res.status}`;
+          throw new Error(`Could not load showtimes: ${detail}`);
+        }
+        setShows(requireArray(data, 'Showtime service'));
       } catch (err) {
         console.error(err);
+        setShows([]);
+        setShowsError(err instanceof Error ? err.message : 'Could not load showtimes.');
       } finally {
         setLoadingShows(false);
       }
@@ -158,10 +174,16 @@ export default function UnifiedMovieBooking() {
     try {
       const url = process.env.NEXT_PUBLIC_SEATS_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
       const res = await fetch(`${url}/seats/${showId}`);
-      const data = await res.json();
-      setSeats(data);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const detail = data && typeof data === 'object' && 'error' in data ? String(data.error) : `HTTP ${res.status}`;
+        throw new Error(`Could not load seats: ${detail}`);
+      }
+      setSeats(requireArray(data, 'Seat service'));
     } catch (err) {
       console.error(err);
+      setSeats([]);
+      setErrorMsg(err instanceof Error ? err.message : 'Could not load seats.');
     } finally {
       setLoadingSeats(false);
     }
@@ -334,6 +356,8 @@ export default function UnifiedMovieBooking() {
 
       {loadingShows ? (
         <div className="spinner"></div>
+      ) : showsError ? (
+        <div className="alert alert-error" role="alert">{showsError}</div>
       ) : shows.length === 0 ? (
         <p>No shows available for this movie.</p>
       ) : (
