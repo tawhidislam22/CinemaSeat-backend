@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const Redis = require('ioredis');
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
@@ -14,6 +15,23 @@ app.use(express.json());
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+  connectTimeout: 1000,
+  maxRetriesPerRequest: 1,
+  retryStrategy: (attempt) => Math.min(attempt * 200, 2000),
+});
+
+redis.on('error', (err) => {
+  console.error('Redis connection error; PostgreSQL fallback remains active:', err.message);
+});
+
+const RELEASE_LOCK_SCRIPT = `
+  if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+  end
+  return 0
+`;
 
 const SEATS_SERVICE_URL = process.env.SEATS_SERVICE_URL || 'http://seats-service:3000';
 const OTP_SERVICE_URL = process.env.OTP_SERVICE_URL || 'http://otp-service:3000';
@@ -52,7 +70,24 @@ app.post('/bookings/hold', async (req, res) => {
   if (!showId || !seatId || !userId || !phone) {
     return res.status(400).json({ error: 'Missing parameters' });
   }
-  
+
+  const lockKey = `lock:seat:${showId}:${seatId}`;
+  const lockToken = uuidv4();
+  let lockAcquired = false;
+
+  try {
+    lockAcquired = Boolean(await redis.set(lockKey, lockToken, 'EX', 5, 'NX'));
+  } catch (err) {
+    // Redis is only a load-shedding optimization. PostgreSQL remains the
+    // correctness boundary, so a Redis outage must not stop seat booking.
+    console.error('Redis seat guard unavailable; continuing with PostgreSQL:', err.message);
+    lockAcquired = null;
+  }
+
+  if (lockAcquired === false) {
+    return res.status(409).json({ error: 'Seat is currently being processed' });
+  }
+
   try {
     // 1. Call Seats Service to lock the seat atomically
     const seatsRes = await fetch(`${SEATS_SERVICE_URL}/seats/hold`, {
@@ -133,6 +168,12 @@ app.post('/bookings/hold', async (req, res) => {
   } catch (err) {
     console.error('Bookings service error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    if (lockAcquired === true) {
+      await redis.eval(RELEASE_LOCK_SCRIPT, 1, lockKey, lockToken).catch((err) => {
+        console.error('Failed to release Redis seat guard:', err.message);
+      });
+    }
   }
 });
 

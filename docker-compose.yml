@@ -80,10 +80,13 @@ services:
       - SEATS_SERVICE_URL=http://seats-service:3000
       - OTP_SERVICE_URL=http://otp-service:3000
       - PAYMENTS_SERVICE_URL=http://payments-service:3000
+      - REDIS_URL=redis://redis:6379
       - OTP_INTERNAL_SECRET=${OTP_INTERNAL_SECRET:-cinemaseat-internal-otp}
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   payments-service:
     build: ./services/payments-service
@@ -119,10 +122,18 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
+        NEXT_PUBLIC_AUTH_URL: https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
+        NEXT_PUBLIC_CATALOG_URL: https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
+        NEXT_PUBLIC_BOOKINGS_URL: https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
+        NEXT_PUBLIC_PAYMENTS_URL: https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
     ports:
       - "3001:3000"
     environment:
       - NEXT_PUBLIC_API_URL=https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
+      - NEXT_PUBLIC_AUTH_URL=https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
+      - NEXT_PUBLIC_CATALOG_URL=https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
+      - NEXT_PUBLIC_BOOKINGS_URL=https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
+      - NEXT_PUBLIC_PAYMENTS_URL=https://6a6cda4777ded6247522ab56_b176d067.lb.poridhi.io
     depends_on:
       - api-gateway
 
