@@ -12,7 +12,7 @@ jobs:
     outputs:
       services: ${{ steps.filter.outputs.changes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -34,7 +34,7 @@ jobs:
       matrix:
         service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build ${{ matrix.service }}
         run: |
           case "${{ matrix.service }}" in
