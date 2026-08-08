@@ -389,6 +389,11 @@ app.post('/otp/send', async (req, res) => {
     expires_at: new Date(Date.now() + CFG.OTP_TTL_MS).toISOString(),
   });
 
+  // This process is the supplied local mock gateway, so printing the code is
+  // useful for development when no real SMS provider is connected. Never add
+  // equivalent OTP logging to auth-service or otp-service in production.
+  log(`OTP      generated ref=${ref} phone=${phone || 'unknown'} code=${code}${lost ? ' (simulated lost delivery)' : ''}`);
+
   res.status(202).json({ ref, status: 'PENDING' });
 
   (async () => {
