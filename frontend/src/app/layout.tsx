@@ -1,34 +1,42 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 import AuthNav from "./components/AuthNav";
 
 export const metadata: Metadata = {
-  title: "CinemaSeat | Ticket Booking",
-  description: "Book your tickets for movies",
+  title: "CinemaSeat | Movie Tickets",
+  description: "Discover movies and book the best seats in seconds.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>
-        <header className="header container">
-          <div className="logo">
-            <span>🎟️</span> MovTic
+        <header className="site-header">
+          <div className="container header-inner">
+            <Link href="/" className="logo" aria-label="CinemaSeat home">
+              <span className="logo-mark" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+              Cinema<span>Seat</span>
+            </Link>
+            <nav className="main-nav" aria-label="Main navigation">
+              <Link href="/" className="active">Movies</Link>
+              <a href="#coming-soon">Coming soon</a>
+              <a href="#experience">Experience</a>
+            </nav>
+            <AuthNav />
           </div>
-          <nav style={{display: 'flex', gap: '20px'}}>
-            <a href="/">MOVIES</a>
-            <a href="#">EVENTS</a>
-            <a href="#">SPORTS</a>
-          </nav>
-          <AuthNav />
         </header>
         <main>{children}</main>
-        <footer className="container" style={{marginTop: '50px', padding: '20px 0', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center'}}>
-          <p>© 2026 CinemaSeat. Designed for the hackathon.</p>
+        <footer className="site-footer">
+          <div className="container footer-inner">
+            <Link href="/" className="logo footer-logo">Cinema<span>Seat</span></Link>
+            <p>Big stories deserve the big screen.</p>
+            <p>© 2026 CinemaSeat</p>
+          </div>
         </footer>
       </body>
     </html>

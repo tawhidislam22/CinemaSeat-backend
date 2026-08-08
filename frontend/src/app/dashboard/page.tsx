@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -23,38 +24,40 @@ interface Ticket {
 export default function Dashboard() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user');
+    const userData = localStorage.getItem('user');
     const token = localStorage.getItem('token');
-    
-    if (!userStr || !token) {
+
+    if (!userData || !token) {
       router.push('/login');
       return;
     }
 
-    const user = JSON.parse(userStr);
-
     async function fetchTickets() {
       try {
-        const url = process.env.NEXT_PUBLIC_BOOKINGS_URL || 'http://localhost:3003';
-        const res = await fetch(`${url}/bookings/my-tickets?userId=${user.id}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        const user = JSON.parse(userData as string) as { id: string };
+        const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+        const response = await fetch(`${url}/bookings/my-tickets?userId=${user.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
-        
-        if (res.ok) {
-          const data = await res.json();
-          setTickets(data);
-        } else if (res.status === 401) {
+
+        if (response.status === 401) {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           router.push('/login');
+          return;
         }
+        if (!response.ok) throw new Error(`Could not load tickets (${response.status}).`);
+
+        const data: unknown = await response.json();
+        if (!Array.isArray(data)) throw new Error('The booking service returned an invalid response.');
+        setTickets(data as Ticket[]);
       } catch (err) {
         console.error('Failed to load tickets', err);
+        setError(err instanceof Error ? err.message : 'Could not load your tickets.');
       } finally {
         setLoading(false);
       }
@@ -63,67 +66,83 @@ export default function Dashboard() {
     fetchTickets();
   }, [router]);
 
-  if (loading) {
-    return <div className="loading">Loading your tickets...</div>;
-  }
-
   return (
-    <div className="dashboard-container">
-      <h1>My Tickets</h1>
-      
-      {tickets.length === 0 ? (
-        <div className="no-tickets">
-          <p>You haven't booked any tickets yet.</p>
-          <button className="btn-primary" onClick={() => router.push('/')}>Browse Movies</button>
+    <div className="dashboard-page">
+      <section className="dashboard-hero">
+        <div className="container dashboard-hero-inner">
+          <div>
+            <span className="eyebrow">Your cinema wallet</span>
+            <h1>My tickets</h1>
+            <p>Everything you need for your next screening, all in one place.</p>
+          </div>
+          <div className="dashboard-stat">
+            <strong>{tickets.length.toString().padStart(2, '0')}</strong>
+            <span>active tickets</span>
+          </div>
         </div>
-      ) : (
-        <div className="tickets-grid">
-          {tickets.map(ticket => (
-            <div key={ticket.id} className="ticket-card">
-              <div className="ticket-header">
-                <img src={ticket.poster_url} alt={ticket.movie_title} className="ticket-poster" />
-                <div className="ticket-movie-info">
-                  <h2>{ticket.movie_title}</h2>
-                  <p className="ticket-time">{new Date(ticket.start_time).toLocaleString()}</p>
-                  <p className="ticket-venue">{ticket.theatre_name} • {ticket.screen_name}</p>
-                </div>
-              </div>
-              
-              <div className="ticket-body">
-                <div className="seat-details">
-                  <div className="detail-box">
-                    <span>Row</span>
-                    <strong>{ticket.row_label}</strong>
-                  </div>
-                  <div className="detail-box">
-                    <span>Seat</span>
-                    <strong>{ticket.seat_number}</strong>
-                  </div>
-                  <div className="detail-box">
-                    <span>Tier</span>
-                    <strong>{ticket.tier}</strong>
-                  </div>
-                </div>
-                
-                <div className="qr-container">
-                  <QRCodeSVG 
-                    value={ticket.booking_ref} 
-                    size={150} 
-                    bgColor={"#ffffff"}
-                    fgColor={"#000000"}
-                    level={"H"}
-                  />
-                  <p className="ref-text">{ticket.booking_ref}</p>
-                </div>
-              </div>
-              <div className="ticket-footer">
-                <span className="status-badge confirmed">CONFIRMED</span>
-                <span className="ticket-price">BDT {parseFloat(ticket.amount).toFixed(2)}</span>
-              </div>
+      </section>
+
+      <section className="dashboard-content container">
+        {loading ? (
+          <div className="dashboard-status"><div className="spinner" /><p>Preparing your tickets…</p></div>
+        ) : error ? (
+          <div className="dashboard-status dashboard-error" role="alert">
+            <span className="status-icon">!</span>
+            <h2>We couldn’t open your wallet</h2>
+            <p>{error}</p>
+            <button className="btn btn-secondary" onClick={() => window.location.reload()}>Try again</button>
+          </div>
+        ) : tickets.length === 0 ? (
+          <div className="empty-wallet">
+            <div className="empty-ticket-art" aria-hidden="true">
+              <div className="empty-ticket-back" />
+              <div className="empty-ticket-front"><span>CS</span><i /></div>
+              <div className="empty-ticket-orbit" />
             </div>
-          ))}
-        </div>
-      )}
+            <div className="empty-wallet-copy">
+              <span className="eyebrow">Your first story awaits</span>
+              <h2>No tickets in your wallet yet.</h2>
+              <p>Browse what’s playing, pick the perfect seats, and your digital ticket will appear here instantly.</p>
+              <Link href="/" className="btn btn-primary">Discover movies <span>→</span></Link>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="dashboard-section-heading">
+              <div><span className="eyebrow">Ready when you are</span><h2>Upcoming screenings</h2></div>
+              <Link href="/" className="text-link">Book another film →</Link>
+            </div>
+            <div className="tickets-list">
+              {tickets.map((ticket) => (
+                <article key={ticket.id} className="cinema-ticket">
+                  <img src={ticket.poster_url} alt="" className="cinema-ticket-poster" />
+                  <div className="cinema-ticket-main">
+                    <div className="ticket-topline">
+                      <span className="status-badge confirmed">{ticket.status || 'Confirmed'}</span>
+                      <span className="booking-reference">REF {ticket.booking_ref}</span>
+                    </div>
+                    <h2>{ticket.movie_title}</h2>
+                    <p className="screening-date">{new Date(ticket.start_time).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} <strong>·</strong> {new Date(ticket.start_time).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p className="ticket-location">{ticket.theatre_name} · {ticket.screen_name}</p>
+                    <div className="ticket-facts">
+                      <div><span>Row</span><strong>{ticket.row_label}</strong></div>
+                      <div><span>Seat</span><strong>{ticket.seat_number}</strong></div>
+                      <div><span>Tier</span><strong>{ticket.tier}</strong></div>
+                      <div><span>Paid</span><strong>৳{Number(ticket.amount).toFixed(2)}</strong></div>
+                    </div>
+                  </div>
+                  <div className="cinema-ticket-stub">
+                    <div className="qr-frame">
+                      <QRCodeSVG value={ticket.booking_ref} size={116} bgColor="#ffffff" fgColor="#001232" level="H" />
+                    </div>
+                    <span>Scan at entrance</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }

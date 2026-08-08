@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type Movie = {
   id: string | number;
@@ -13,34 +13,35 @@ type Movie = {
 
 function getMovies(payload: unknown): Movie[] {
   if (Array.isArray(payload)) return payload as Movie[];
-
-  if (payload && typeof payload === 'object' && 'movies' in payload) {
+  if (payload && typeof payload === "object" && "movies" in payload) {
     const movies = (payload as { movies: unknown }).movies;
     if (Array.isArray(movies)) return movies as Movie[];
   }
-
-  throw new Error('The catalog returned an invalid movies response.');
+  throw new Error("The cinema catalog returned an unexpected response.");
 }
 
 export default function Home() {
   const [movies, setMovies] = useState<Movie[]>([]);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMovies = async () => {
       try {
-        const url = process.env.NEXT_PUBLIC_CATALOG_URL || 'http://localhost:3001';
-        const res = await fetch(`${url}/catalog/movies`);
-        if (!res.ok) {
-          throw new Error(`Could not load movies (${res.status}).`);
-        }
-
-        const data: unknown = await res.json();
-        setMovies(getMovies(data));
+        const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        const response = await fetch(`${url}/catalog/movies`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) throw new Error(`Could not load movies (${response.status}).`);
+        setMovies(getMovies(await response.json()));
       } catch (err) {
-        console.error(err);
-        setError(err instanceof Error ? err.message : 'Could not load movies.');
+        const message = err instanceof Error ? err.message : "Could not load movies.";
+        setError(
+          message === "Failed to fetch" || err instanceof DOMException
+            ? "The movie service is currently offline. Start the API gateway and refresh this page."
+            : message,
+        );
       } finally {
         setLoading(false);
       }
@@ -48,45 +49,103 @@ export default function Home() {
     fetchMovies();
   }, []);
 
+  const visibleMovies = useMemo(
+    () => movies.filter((movie) => movie.title.toLowerCase().includes(query.trim().toLowerCase())),
+    [movies, query],
+  );
+
   return (
-    <div>
-      <section style={{textAlign: 'center', padding: '80px 20px', background: 'url("https://pixner.net/boleto/demo/assets/images/banner/banner01.jpg") no-repeat center bottom', backgroundSize: 'cover'}}>
-        <h1 style={{fontSize: '3.5rem', marginBottom: '20px'}}>
-          BOOK YOUR<br/>
-          <span style={{color: 'var(--accent-primary)'}}>TICKETS FOR MOVIES</span>
-        </h1>
-        <p style={{fontSize: '1.2rem'}}>Safe, secure, reliable ticketing. Your ticket to live entertainment!</p>
+    <>
+      <section className="hero">
+        <div className="hero-glow hero-glow-one" />
+        <div className="hero-glow hero-glow-two" />
+        <div className="container hero-content">
+          <span className="eyebrow">The cinema starts here</span>
+          <h1>Make tonight<br /><span>larger than life.</span></h1>
+          <p>Discover the biggest releases, choose your perfect seat, and book in a few effortless clicks.</p>
+          <a href="#movies" className="btn btn-primary hero-button">Explore showtimes <span>→</span></a>
+        </div>
+        <div className="hero-art" aria-hidden="true">
+          <div className="film-frame frame-one" />
+          <div className="film-frame frame-two" />
+          <div className="film-frame frame-three" />
+          <div className="play-orbit"><span>▶</span></div>
+        </div>
       </section>
 
-      <div className="container">
-        <h2 style={{marginTop: '40px'}}>MOVIES</h2>
-        <p>Be sure not to miss these movies today.</p>
-
-        {loading ? (
-          <div className="spinner"></div>
-        ) : error ? (
-          <p role="alert">{error}</p>
-        ) : movies.length === 0 ? (
-          <p>No movies are currently available.</p>
-        ) : (
-          <div className="movie-grid">
-            {movies.map(movie => (
-              <div key={movie.id} className="movie-card">
-                <img src={movie.poster_url} alt={movie.title} className="movie-poster" />
-                <div className="movie-info">
-                  <h3 className="movie-title">{movie.title}</h3>
-                  <div className="flex justify-between items-center mt-4">
-                    <span style={{color: 'var(--text-secondary)'}}>{movie.duration_min} min | {movie.rating}</span>
-                    <Link href={`/movie/${movie.id}`} className="btn btn-secondary" style={{padding: '5px 15px'}}>
-                      BOOK
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            ))}
+      <div className="container discovery-wrap">
+        <section className="discovery-panel" aria-label="Find a movie">
+          <div className="discovery-heading">
+            <span>Welcome</span>
+            <strong>What are you watching today?</strong>
           </div>
-        )}
+          <label className="search-field">
+            <span aria-hidden="true">⌕</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search by movie title"
+              aria-label="Search by movie title"
+            />
+          </label>
+          <a href="#movies" className="btn btn-primary search-button">Find movies</a>
+        </section>
       </div>
-    </div>
+
+      <section className="movie-section" id="movies">
+        <div className="container">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Now showing</span>
+              <h2>Movies made for the big screen</h2>
+            </div>
+            <div className="heading-rule" />
+            <span className="result-count">{visibleMovies.length} films</span>
+          </div>
+
+          {loading ? (
+            <div className="loading-state"><div className="spinner" /><p>Loading the programme…</p></div>
+          ) : error ? (
+            <div className="empty-state" role="alert"><strong>The projector is warming up.</strong><p>{error}</p></div>
+          ) : visibleMovies.length === 0 ? (
+            <div className="empty-state"><strong>No matching movies</strong><p>Try another title or clear your search.</p></div>
+          ) : (
+            <div className="movie-grid">
+              {visibleMovies.map((movie) => (
+                <article key={movie.id} className="movie-card">
+                  <Link href={`/movie/${movie.id}`} className="poster-wrap" aria-label={`Book ${movie.title}`}>
+                    <img src={movie.poster_url} alt={`Poster for ${movie.title}`} className="movie-poster" />
+                    <span className="rating-badge">{movie.rating}</span>
+                    <span className="poster-action">View showtimes</span>
+                  </Link>
+                  <div className="movie-info">
+                    <div>
+                      <h3 className="movie-title">{movie.title}</h3>
+                      <p>{movie.duration_min} min · Cinema</p>
+                    </div>
+                    <Link href={`/movie/${movie.id}`} className="round-link" aria-label={`Book ${movie.title}`}>→</Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="experience-section" id="experience">
+        <div className="container experience-card">
+          <div>
+            <span className="eyebrow">Your perfect night out</span>
+            <h2>Great films. Better seats.<br />Zero waiting in line.</h2>
+          </div>
+          <div className="benefit-list">
+            <div><span>01</span><strong>Live seat selection</strong><p>See availability and choose together.</p></div>
+            <div><span>02</span><strong>Secure checkout</strong><p>Your booking is protected end to end.</p></div>
+            <div><span>03</span><strong>Instant tickets</strong><p>Walk straight in with your digital pass.</p></div>
+          </div>
+        </div>
+      </section>
+      <div id="coming-soon" />
+    </>
   );
 }

@@ -20,23 +20,25 @@ app.post('/payments/charge', (req, res) => {
   console.log('[Mock Gateway] Payment Charge requested:', req.body);
   
   // Simulate asynchronous payment processing and webhook firing
-  const { amount, callbackUrl, referenceId } = req.body;
+  const { amount, callback_url, booking_ref } = req.body;
   
   // Return immediate acknowledgment
-  res.json({ success: true, transactionId: 'txn_' + Date.now() });
+  res.json({ success: true, transactionId: 'txn_' + Date.now(), payment_id: 'pay_' + Date.now() });
 
   // Fire webhook after 2 seconds to the callback URL
-  if (callbackUrl) {
+  if (callback_url) {
     setTimeout(async () => {
       try {
-        console.log(`[Mock Gateway] Firing webhook to ${callbackUrl}`);
-        await fetch(callbackUrl, {
+        console.log(`[Mock Gateway] Firing webhook to ${callback_url}`);
+        await fetch(callback_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             event_id: 'evt_' + Date.now(),
-            reference_id: referenceId,
-            status: 'SUCCESS'
+            booking_ref: booking_ref,
+            payment_id: 'pay_' + Date.now(),
+            status: 'SUCCEEDED',
+            amount: amount
           })
         });
       } catch (err) {
