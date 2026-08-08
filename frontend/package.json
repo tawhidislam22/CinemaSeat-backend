@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "html2canvas": "^1.4.1",
     "i": "^0.3.7",
     "next": "16.3.0",
     "qrcode.react": "^4.2.0",

@@ -26,7 +26,7 @@ app.get('/catalog/movies', async (req, res) => {
 app.get('/catalog/shows/:movieId', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT sh.id, sh.start_time, sh.base_price, sc.name as screen_name, t.name as theatre_name
+      SELECT sh.id, sh.start_time, sh.base_price, sc.name as screen_name, t.name as theatre_name, t.city as city
       FROM shows sh
       JOIN screens sc ON sh.screen_id = sc.id
       JOIN theatres t ON sc.theatre_id = t.id
