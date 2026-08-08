@@ -92,15 +92,21 @@ app.post('/payments/charge', async (req, res) => {
     if (requestedMode) gatewayHeaders['X-Mock-Mode'] = requestedMode;
     if (requestedForce) gatewayHeaders['X-Mock-Force'] = requestedForce;
 
+    const gatewayPayload = {
+      amount,
+      currency: 'BDT',
+      booking_ref: bookingRef,
+      callback_url: CALLBACK_URL
+    };
+    console.log('Sending gateway charge:', {
+      ...gatewayPayload,
+      amountType: typeof gatewayPayload.amount
+    });
+
     const gatewayRes = await fetch(`${GATEWAY_URL}/charge`, {
       method: 'POST',
       headers: gatewayHeaders,
-      body: JSON.stringify({
-        amount,
-        currency: 'BDT',
-        booking_ref: bookingRef,
-        callback_url: CALLBACK_URL
-      })
+      body: JSON.stringify(gatewayPayload)
     });
 
     if (gatewayRes.ok) {
@@ -213,5 +219,5 @@ app.get('/health', (req, res) => res.status(200).send('OK'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Payments service listening on port ${PORT}`);
+  console.log(`Payments service listening on port ${PORT} (numeric gateway payload enabled)`);
 });
