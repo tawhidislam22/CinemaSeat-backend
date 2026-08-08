@@ -1,0 +1,27 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.env
+
+# Next.js
+.next/
+out/
+build/
+.swc/
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Docker
+docker-compose.override.yml
+.env.local
+
+# Logs and databases
+*.log
+*.sqlite
+data/
+pgdata/

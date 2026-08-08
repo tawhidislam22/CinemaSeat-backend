@@ -1,0 +1,29 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test-services:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth-service, catalog-service, seats-service, bookings-service, payments-service, otp-service]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+          
+      - name: Install Dependencies
+        working-directory: ./services/${{ matrix.service }}
+        run: npm install
+        
+      # - name: Run Tests
+      #   working-directory: ./services/${{ matrix.service }}
+      #   run: npm test

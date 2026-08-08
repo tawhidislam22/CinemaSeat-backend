@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cinemaseat
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init/00-schemas.sql:/docker-entrypoint-initdb.d/00-schemas.sql
+      - ./db/init/01-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql
+      - ./db/init/02-seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  mock-gateway:
+    image: asifmahmoud414/mock-gateway:latest
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  api-gateway:
+    build: ./gateway
+    ports:
+      - "8080:80"
+    depends_on:
+      - auth-service
+      - catalog-service
+      - seats-service
+      - bookings-service
+      - payments-service
+      - otp-service
+
+  auth-service:
+    build: ./services/auth-service
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+    depends_on:
+      db:
+        condition: service_healthy
+
+  catalog-service:
+    build: ./services/catalog-service
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+    depends_on:
+      db:
+        condition: service_healthy
+
+  seats-service:
+    build: ./services/seats-service
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - HOLD_TTL_SECONDS=${HOLD_TTL_SECONDS:-120}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  bookings-service:
+    build: ./services/bookings-service
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - SEATS_SERVICE_URL=http://seats-service:3000
+      - OTP_SERVICE_URL=http://otp-service:3000
+      - PAYMENTS_SERVICE_URL=http://payments-service:3000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  payments-service:
+    build: ./services/payments-service
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - GATEWAY_URL=http://mock-gateway:9000
+      - CALLBACK_URL=http://api-gateway:80/webhooks/payment
+      - BOOKINGS_SERVICE_URL=http://bookings-service:3000
+    depends_on:
+      db:
+        condition: service_healthy
+      mock-gateway:
+        condition: service_started
+
+  otp-service:
+    build: ./services/otp-service
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - GATEWAY_URL=http://mock-gateway:9000
+    depends_on:
+      db:
+        condition: service_healthy
+      mock-gateway:
+        condition: service_started
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - api-gateway
+
+volumes:
+  postgres_data:

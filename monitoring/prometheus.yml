@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'cinemaseat-services'
+    static_configs:
+      - targets:
+        - 'auth-service:3000'
+        - 'catalog-service:3000'
+        - 'seats-service:3000'
+        - 'bookings-service:3000'
+        - 'payments-service:3000'
+        - 'otp-service:3000'
