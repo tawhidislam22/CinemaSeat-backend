@@ -1,29 +1,44 @@
-name: CI Pipeline
+name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
+    branches: [main]
+  push:
+    branches: [main]
 
 jobs:
-  test-services:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            auth-service: 'services/auth-service/**'
+            catalog-service: 'services/catalog-service/**'
+            seats-service: 'services/seats-service/**'
+            bookings-service: 'services/bookings-service/**'
+            payments-service: 'services/payments-service/**'
+            otp-service: 'services/otp-service/**'
+            frontend: 'frontend/**'
+            gateway: 'gateway/**'
+
+  build:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [auth-service, catalog-service, seats-service, bookings-service, payments-service, otp-service]
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-          
-      - name: Install Dependencies
-        working-directory: ./services/${{ matrix.service }}
-        run: npm install
-        
-      # - name: Run Tests
-      #   working-directory: ./services/${{ matrix.service }}
-      #   run: npm test
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.service }}
+        run: |
+          case "${{ matrix.service }}" in
+            frontend) docker build -t test-frontend ./frontend ;;
+            gateway) docker build -t test-gateway ./gateway ;;
+            *) docker build -t test-${{ matrix.service }} ./services/${{ matrix.service }} ;;
+          esac
