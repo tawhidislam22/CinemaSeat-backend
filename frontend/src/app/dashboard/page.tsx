@@ -40,7 +40,7 @@ export default function Dashboard() {
     async function fetchTickets() {
       try {
         const user = JSON.parse(userData as string) as { id: string };
-        const url = process.env.NEXT_PUBLIC_BOOKINGS_URL || 'http://localhost:3003';
+        const url = process.env.NEXT_PUBLIC_BOOKINGS_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003';
         const response = await fetch(`${url}/bookings/my-tickets?userId=${user.id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });

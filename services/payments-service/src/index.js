@@ -4,8 +4,9 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const path = require('path');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 const app = express();
 app.use(cors());
