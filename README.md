@@ -218,7 +218,7 @@ curl -X POST http://localhost:8080/auth/register \
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/catalog/movies` | List movies |
-| `GET` | `/catalog/movies/:id` | Get a movie and its shows |
+| `GET` | `/catalog/shows/:movieId` | List shows for a movie |
 | `GET` | `/seats/:showId` | Fetch a show seat map |
 | `POST` | `/seats/hold` | Internal atomic seat hold |
 | `POST` | `/seats/release` | Internal seat release |
