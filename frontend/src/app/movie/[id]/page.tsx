@@ -302,12 +302,12 @@ export default function UnifiedMovieBooking() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookingRef, otpCode: otp })
       });
-      const data = await chargeRes.json();
+      const data = await chargeRes.json().catch(() => ({}));
 
       if (chargeRes.status === 202) {
         setStep('SUCCESS');
       } else {
-        setErrorMsg(data.error || 'Payment failed');
+        setErrorMsg(data.gatewayMessage || data.error || `Payment failed (${chargeRes.status})`);
         setStep('OTP');
       }
     } catch (err) {

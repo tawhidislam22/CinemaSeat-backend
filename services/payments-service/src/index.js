@@ -50,6 +50,13 @@ app.post('/payments/charge', async (req, res) => {
       return res.status(410).json({ error: 'Seat hold expired before payment was completed' });
     }
 
+    // node-postgres returns NUMERIC columns as strings. The supplied gateway
+    // deliberately rejects anything other than a positive JSON number.
+    const amount = Number(booking.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(422).json({ error: 'Booking has an invalid payment amount' });
+    }
+
     // Payment OTP is verified here, not in the browser, so /payments/charge
     // cannot be called directly to bypass the OTP step.
     const otpResponse = await fetch(`${OTP_SERVICE_URL}/otp/verify`, {
@@ -71,7 +78,7 @@ app.post('/payments/charge', async (req, res) => {
       INSERT INTO payments (booking_id, idempotency_key, amount)
       VALUES ($1, $2, $3)
       RETURNING id;
-    `, [booking.id, idempotencyKey, booking.amount]);
+    `, [booking.id, idempotencyKey, amount]);
     paymentId = paymentRes.rows[0].id;
     await client.query('COMMIT');
     transactionOpen = false;
@@ -89,7 +96,7 @@ app.post('/payments/charge', async (req, res) => {
       method: 'POST',
       headers: gatewayHeaders,
       body: JSON.stringify({
-        amount: booking.amount,
+        amount,
         currency: 'BDT',
         booking_ref: bookingRef,
         callback_url: CALLBACK_URL
