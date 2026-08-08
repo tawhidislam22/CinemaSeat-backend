@@ -2,9 +2,10 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 const app = express();
 app.use(cors());

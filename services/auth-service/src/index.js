@@ -2,8 +2,8 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const dotenv = require('dotenv');
-
-dotenv.config();
+const path = require('path');
+dotenv.config({ path: path.join(__dirname, '../../../.env') }); // load root .env
 
 const app = express();
 app.use(cors());
@@ -57,51 +57,7 @@ app.post('/auth/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid phone or password' });
 
-    const challengeRef = `login_${crypto.randomBytes(16).toString('hex')}`;
-    const otpResponse = await fetch(`${OTP_SERVICE_URL}/otp/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': OTP_INTERNAL_SECRET || '' },
-      body: JSON.stringify({ phone: user.phone, ref: challengeRef, purpose: 'LOGIN' })
-    });
-    const otpData = await otpResponse.json();
-    if (!otpResponse.ok) {
-      return res.status(502).json({ error: otpData.error || 'Could not send login OTP' });
-    }
-
-    const visibleDigits = user.phone.slice(-3);
-    res.status(202).json({
-      success: true,
-      requiresOtp: true,
-      challengeRef,
-      phoneMasked: `*******${visibleDigits}`
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Internal error' });
-  }
-});
-
-app.post('/auth/login/verify-otp', async (req, res) => {
-  const { challengeRef, code } = req.body;
-  if (!challengeRef || !String(challengeRef).startsWith('login_') || !code) {
-    return res.status(400).json({ error: 'Invalid login OTP challenge' });
-  }
-
-  try {
-    const otpResponse = await fetch(`${OTP_SERVICE_URL}/otp/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': OTP_INTERNAL_SECRET || '' },
-      body: JSON.stringify({ ref: challengeRef, code, purpose: 'LOGIN' })
-    });
-    const otpData = await otpResponse.json();
-    if (!otpResponse.ok || otpData.purpose !== 'LOGIN') {
-      return res.status(400).json({ error: otpData.error || 'Invalid login OTP' });
-    }
-
-    const result = await pool.query('SELECT id, phone, name FROM users WHERE phone = $1', [otpData.phone]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-
-    res.json({ success: true, ...issueLogin(result.rows[0]) });
+    res.json({ success: true, ...issueLogin(user) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal error' });

@@ -21,6 +21,7 @@ This project implements a microservices architecture consisting of:
    ```bash
    docker compose up --build -d
    ```
+   For deployment, set a strong `JWT_SECRET` in `.env`; the Compose fallback is intended only to keep clean-clone development reproducible.
 4. The API Gateway will be available at `http://localhost:8080`.
 5. The Frontend will be available at `http://localhost:3001`.
 
@@ -56,6 +57,7 @@ The browser never talks directly to the supplied OTP gateway. Backend services c
 - [DECISIONS.md](DECISIONS.md) - Design decisions and architectural trade-offs.
 - [docs/architecture.md](docs/architecture.md) - Architecture diagrams and rubric mappings.
 - [docs/pipeline-diagram.md](docs/pipeline-diagram.md) - CI/CD pipeline overview.
+- [docs/ci-cd.md](docs/ci-cd.md) - Poridhi self-hosted runner and branch-protection setup.
 
 ## Load Testing
 The `load-tests/` directory contains `k6` scripts to verify the system's resilience under heavy concurrency.

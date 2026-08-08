@@ -31,7 +31,7 @@ export default function UnifiedMovieBooking() {
   const [phone, setPhone] = useState('01711111111');
   const [bookingRef, setBookingRef] = useState('');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'HOLDING' | 'OTP' | 'PAYMENT' | 'PROCESSING' | 'SUCCESS'>('HOLDING');
+  const [step, setStep] = useState<'HOLDING' | 'OTP' | 'PROCESSING' | 'SUCCESS'>('HOLDING');
   const [errorMsg, setErrorMsg] = useState('');
   const [amount, setAmount] = useState(0);
 
@@ -45,7 +45,7 @@ export default function UnifiedMovieBooking() {
     if (!movieId) return;
     const fetchShows = async () => {
       try {
-        const url = process.env.NEXT_PUBLIC_CATALOG_URL || 'http://localhost:3001';
+        const url = process.env.NEXT_PUBLIC_CATALOG_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
         const res = await fetch(`${url}/catalog/shows/${movieId}`);
         const data = await res.json();
         setShows(data);
@@ -156,7 +156,7 @@ export default function UnifiedMovieBooking() {
   // 2. Fetch seats when a show is selected
   const fetchSeats = async (showId: string) => {
     try {
-      const url = process.env.NEXT_PUBLIC_SEATS_URL || 'http://localhost:3002';
+      const url = process.env.NEXT_PUBLIC_SEATS_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
       const res = await fetch(`${url}/seats/${showId}`);
       const data = await res.json();
       setSeats(data);
@@ -269,10 +269,29 @@ export default function UnifiedMovieBooking() {
     }
   };
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     if (!otp) return;
     setErrorMsg('');
-    setStep('PAYMENT');
+    setStep('PROCESSING');
+    try {
+      const paymentsUrl = process.env.NEXT_PUBLIC_PAYMENTS_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004';
+      const chargeRes = await fetch(`${paymentsUrl}/payments/charge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingRef, otpCode: otp })
+      });
+      const data = await chargeRes.json();
+
+      if (chargeRes.status === 202) {
+        setStep('SUCCESS');
+      } else {
+        setErrorMsg(data.error || 'Payment failed');
+        setStep('OTP');
+      }
+    } catch (err) {
+      setErrorMsg('Error processing payment');
+      setStep('OTP');
+    }
   };
 
   const handleResendPaymentOtp = async () => {
@@ -298,30 +317,6 @@ export default function UnifiedMovieBooking() {
       setResendCooldown(30);
     } catch {
       setErrorMsg('Network error while resending payment OTP');
-    }
-  };
-
-  const handlePay = async () => {
-    setErrorMsg('');
-    setStep('PROCESSING');
-    try {
-      const paymentsUrl = process.env.NEXT_PUBLIC_PAYMENTS_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004';
-      const chargeRes = await fetch(`${paymentsUrl}/payments/charge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingRef, otpCode: otp })
-      });
-      const data = await chargeRes.json();
-
-      if (chargeRes.status === 202) {
-        setStep('SUCCESS');
-      } else {
-        setErrorMsg(data.error || 'Payment failed');
-        setStep(chargeRes.status === 400 ? 'OTP' : 'PAYMENT');
-      }
-    } catch (err) {
-      setErrorMsg('Error processing payment');
-      setStep('PAYMENT');
     }
   };
 
@@ -547,53 +542,9 @@ export default function UnifiedMovieBooking() {
                 </div>
                 <div className="flex justify-between mt-4">
                   <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Close</button>
-                  <button className="btn btn-primary" onClick={handleVerifyOtp}>Continue to Payment</button>
-                </div>
-                <button
-                  className="btn btn-secondary"
-                  style={{ width: '100%', marginTop: '12px' }}
-                  disabled={resendCooldown > 0 || secondsRemaining === 0}
-                  onClick={handleResendPaymentOtp}
-                >
-                  {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'OTP not received? Resend'}
-                </button>
-              </div>
-            )}
-
-            {step === 'PAYMENT' && (
-              <div>
-                <div className="alert alert-success">Payment OTP entered. It will be verified securely when you pay.</div>
-                <p>Amount to pay: <strong style={{color: '#ffcc00', fontSize: '1.2rem'}}>{amount} BDT</strong></p>
-                <div style={{ display: 'flex', gap: '10px', marginTop: '20px', marginBottom: '20px' }}>
-                  <div style={{ flex: 1, border: '2px solid var(--accent-primary)', padding: '15px', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.05)' }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '5px' }}>💳</div>
-                    <strong>Credit/Debit Card</strong>
-                  </div>
-                  <div style={{ flex: 1, border: '1px solid rgba(255,255,255,0.2)', padding: '15px', borderRadius: '8px', textAlign: 'center', cursor: 'not-allowed', opacity: 0.6 }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '5px' }}>📱</div>
-                    <strong>Mobile Banking</strong>
-                  </div>
-                </div>
-                
-                <div className="input-group">
-                  <label>Card Number</label>
-                  <input type="text" placeholder="XXXX XXXX XXXX XXXX" />
-                </div>
-                <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
-                  <div className="input-group" style={{ flex: 1 }}>
-                    <label>Expiry Date</label>
-                    <input type="text" placeholder="MM/YY" />
-                  </div>
-                  <div className="input-group" style={{ flex: 1 }}>
-                    <label>CVV</label>
-                    <input type="password" placeholder="123" />
-                  </div>
+                  <button className="btn btn-primary" onClick={handleVerifyOtp}>Verify & Pay</button>
                 </div>
 
-                <div className="flex justify-between mt-4">
-                  <button className="btn btn-secondary" onClick={() => setStep('OTP')}>Back</button>
-                  <button className="btn btn-primary" onClick={handlePay}>Pay {amount} BDT</button>
-                </div>
               </div>
             )}
 

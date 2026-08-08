@@ -17,7 +17,7 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const url = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3006';
+      const url = process.env.NEXT_PUBLIC_AUTH_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3006';
       const res = await fetch(`${url}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -54,6 +54,7 @@ export default function Register() {
               value={name} 
               onChange={(e) => setName(e.target.value)} 
               required 
+              autoComplete="name"
               placeholder="John Doe"
             />
           </div>
@@ -64,6 +65,7 @@ export default function Register() {
               value={phone} 
               onChange={(e) => setPhone(e.target.value)} 
               required 
+              autoComplete="username"
               placeholder="017xxxxxxxx"
             />
           </div>
@@ -74,6 +76,7 @@ export default function Register() {
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
               required 
+              autoComplete="new-password"
               placeholder="••••••••"
             />
           </div>
