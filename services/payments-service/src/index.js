@@ -32,6 +32,9 @@ app.post('/payments/charge', async (req, res) => {
   if (!bookingRef || !otpCode) return res.status(400).json({ error: 'Missing bookingRef or payment OTP' });
 
   const client = await pool.connect();
+  let transactionOpen = false;
+  let booking;
+  let paymentId;
   try {
     const bookingRes = await client.query(`
       SELECT b.*, ss.status AS seat_status, ss.held_until
@@ -40,7 +43,7 @@ app.post('/payments/charge', async (req, res) => {
       WHERE b.booking_ref = $1
     `, [bookingRef]);
     if (bookingRes.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
-    const booking = bookingRes.rows[0];
+    booking = bookingRes.rows[0];
 
     if (booking.status !== 'HELD') return res.status(400).json({ error: 'Booking is not in HELD state' });
     if (booking.seat_status !== 'HELD' || !booking.held_until || new Date(booking.held_until) <= new Date()) {
@@ -60,6 +63,7 @@ app.post('/payments/charge', async (req, res) => {
     }
 
     await client.query('BEGIN');
+    transactionOpen = true;
     await client.query(`UPDATE bookings SET status = 'PENDING_PAYMENT' WHERE id = $1`, [booking.id]);
     
     const idempotencyKey = `idemp_${uuidv4()}`;
@@ -68,7 +72,9 @@ app.post('/payments/charge', async (req, res) => {
       VALUES ($1, $2, $3)
       RETURNING id;
     `, [booking.id, idempotencyKey, booking.amount]);
+    paymentId = paymentRes.rows[0].id;
     await client.query('COMMIT');
+    transactionOpen = false;
 
     const gatewayHeaders = {
       'Content-Type': 'application/json',
@@ -92,19 +98,48 @@ app.post('/payments/charge', async (req, res) => {
 
     if (gatewayRes.ok) {
       const data = await gatewayRes.json();
-      await pool.query(`UPDATE payments SET gateway_payment_id = $1 WHERE id = $2`, [data.payment_id, paymentRes.rows[0].id]);
+      await pool.query(`UPDATE payments SET gateway_payment_id = $1 WHERE id = $2`, [data.payment_id, paymentId]);
       res.status(202).json({ success: true, message: 'Payment initiated' });
     } else {
-      res.status(500).json({ error: 'Gateway charge failed' });
+      const errorText = await gatewayRes.text();
+      console.error('Gateway charge rejected:', gatewayRes.status, errorText);
+      await restoreHeldBooking(booking.id, paymentId);
+      res.status(502).json({
+        error: 'Payment gateway rejected the charge',
+        gatewayStatus: gatewayRes.status,
+        gatewayMessage: errorText.slice(0, 500)
+      });
     }
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
+    if (transactionOpen) {
+      await client.query('ROLLBACK');
+    } else if (booking?.id && paymentId) {
+      await restoreHeldBooking(booking.id, paymentId);
+    }
+    console.error('Payment charge error:', err);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
   }
 });
+
+async function restoreHeldBooking(bookingId, paymentId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE bookings SET status = 'HELD' WHERE id = $1 AND status = 'PENDING_PAYMENT'`,
+      [bookingId]
+    );
+    await client.query(`DELETE FROM payments WHERE id = $1`, [paymentId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Failed to restore booking after gateway error:', err);
+  } finally {
+    client.release();
+  }
+}
 
 // Webhook for gateway
 app.post('/webhooks/payment', async (req, res) => {
