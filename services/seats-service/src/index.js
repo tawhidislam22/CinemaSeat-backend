@@ -15,6 +15,10 @@ const pool = new Pool({
 
 const HOLD_TTL_SECONDS = parseInt(process.env.HOLD_TTL_SECONDS || '120', 10);
 
+app.get('/', (req, res) => {
+  res.send('CinemaSeat Seats Service API is running.');
+});
+
 app.get('/seats/:showId', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -104,9 +108,10 @@ setInterval(async () => {
     `);
     if (result.rowCount > 0) {
       console.log(`Swept ${result.rowCount} expired holds.`);
-      // Note: Ideally, pub/sub to notify bookings-service to update booking status
-      // We will do a direct DB update for bookings here just to simplify the sweeper's effect across bounded contexts, or orchestrator should listen.
-      // The user's architecture suggests pub/sub: "Redis publish on state change"
+      // Expire the stale bookings directly to prevent unique constraint violations on re-booking
+      for (const row of result.rows) {
+        await pool.query(`UPDATE bookings SET status = 'EXPIRED' WHERE seat_id = $1 AND show_id = $2 AND status = 'HELD'`, [row.seat_id, row.show_id]);
+      }
     }
   } catch (err) {
     console.error('Sweeper error:', err);

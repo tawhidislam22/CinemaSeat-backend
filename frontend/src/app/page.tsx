@@ -3,19 +3,44 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
+type Movie = {
+  id: string | number;
+  poster_url: string;
+  title: string;
+  duration_min: number;
+  rating: string;
+};
+
+function getMovies(payload: unknown): Movie[] {
+  if (Array.isArray(payload)) return payload as Movie[];
+
+  if (payload && typeof payload === 'object' && 'movies' in payload) {
+    const movies = (payload as { movies: unknown }).movies;
+    if (Array.isArray(movies)) return movies as Movie[];
+  }
+
+  throw new Error('The catalog returned an invalid movies response.');
+}
+
 export default function Home() {
-  const [movies, setMovies] = useState<any[]>([]);
+  const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMovies = async () => {
       try {
-        const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-        const res = await fetch(`${url}/api/movies`);
-        const data = await res.json();
-        setMovies(data);
+        const url = process.env.NEXT_PUBLIC_CATALOG_URL || 'http://localhost:3001';
+        const res = await fetch(`${url}/catalog/movies`);
+        if (!res.ok) {
+          throw new Error(`Could not load movies (${res.status}).`);
+        }
+
+        const data: unknown = await res.json();
+        setMovies(getMovies(data));
       } catch (err) {
         console.error(err);
+        setError(err instanceof Error ? err.message : 'Could not load movies.');
       } finally {
         setLoading(false);
       }
@@ -39,6 +64,10 @@ export default function Home() {
 
         {loading ? (
           <div className="spinner"></div>
+        ) : error ? (
+          <p role="alert">{error}</p>
+        ) : movies.length === 0 ? (
+          <p>No movies are currently available.</p>
         ) : (
           <div className="movie-grid">
             {movies.map(movie => (

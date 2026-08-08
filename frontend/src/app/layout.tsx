@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AuthNav from "./components/AuthNav";
 
 export const metadata: Metadata = {
   title: "CinemaSeat | Ticket Booking",
@@ -23,7 +24,7 @@ export default function RootLayout({
             <a href="#">EVENTS</a>
             <a href="#">SPORTS</a>
           </nav>
-          <a href="#" className="btn btn-primary">JOIN US</a>
+          <AuthNav />
         </header>
         <main>{children}</main>
         <footer className="container" style={{marginTop: '50px', padding: '20px 0', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center'}}>

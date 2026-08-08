@@ -25,8 +25,8 @@ export default function SeatSelection() {
 
   const fetchSeats = async () => {
     try {
-      const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${url}/api/seats/${showId}`);
+      const url = process.env.NEXT_PUBLIC_SEATS_URL || 'http://localhost:3002';
+      const res = await fetch(`${url}/seats/${showId}`);
       const data = await res.json();
       setSeats(data);
     } catch (err) {
@@ -50,20 +50,28 @@ export default function SeatSelection() {
     setSelectedSeat(seat);
   };
 
-  const handleHold = async () => {
-    if (!selectedSeat || !phone) return;
-    setErrorMsg('');
-    setStep('PROCESSING');
+  const handleHoldSeat = async () => {
+    if (!selectedSeat) return;
+    
+    // Check if user is logged in
+    const userStr = localStorage.getItem('user');
+    if (!userStr) {
+      router.push('/login');
+      return;
+    }
+    const user = JSON.parse(userStr);
+
+    setStep('HOLDING');
     try {
-      const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${url}/api/hold`, {
+      const url = process.env.NEXT_PUBLIC_BOOKINGS_URL || 'http://localhost:3003';
+      const res = await fetch(`${url}/bookings/hold`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           showId,
           seatId: selectedSeat.seat_id,
-          userId: USER_ID,
-          phone
+          userId: user.id, // Use actual user ID
+          phone: user.phone // Use actual user phone
         })
       });
       const data = await res.json();
@@ -89,16 +97,16 @@ export default function SeatSelection() {
     setErrorMsg('');
     setStep('PROCESSING');
     try {
-      const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${url}/api/otp/verify`, {
+      const otpUrl = process.env.NEXT_PUBLIC_OTP_URL || 'http://localhost:3005';
+      const res = await fetch(`${otpUrl}/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ref: bookingRef, code: otp })
       });
       const data = await res.json();
       if (res.status === 200) {
-        // Now trigger charge
-        const chargeRes = await fetch(`${url}/api/charge`, {
+        const paymentsUrl = process.env.NEXT_PUBLIC_PAYMENTS_URL || 'http://localhost:3004';
+        const chargeRes = await fetch(`${paymentsUrl}/payments/charge`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookingRef })
@@ -212,13 +220,12 @@ export default function SeatSelection() {
             {step === 'PHONE' && (
               <div>
                 <p>Holding seat <strong>{selectedSeat?.row_label}{selectedSeat?.seat_number}</strong></p>
-                <div className="input-group mt-4">
-                  <label>Phone Number (for OTP & Tickets)</label>
-                  <input type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="017xxxxxxxx" />
+                <div className="alert alert-success mt-4">
+                  We will send an OTP to your registered phone number.
                 </div>
                 <div className="flex justify-between mt-4">
                   <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                  <button className="btn btn-primary" onClick={handleHold}>Hold Seat & Send OTP</button>
+                  <button className="btn btn-primary" onClick={handleHoldSeat}>Hold Seat & Send OTP</button>
                 </div>
               </div>
             )}
@@ -253,7 +260,7 @@ export default function SeatSelection() {
                 <p style={{fontSize: '0.9rem'}}>The webhook will finalize the status asynchronously.</p>
                 <button className="btn btn-primary mt-4" onClick={() => {
                   setShowModal(false);
-                  router.push('/');
+                  router.push('/dashboard');
                 }}>Return Home</button>
               </div>
             )}

@@ -50,7 +50,7 @@ services:
   auth-service:
     build: ./services/auth-service
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - DATABASE_URL=postgresql://neondb_owner:npg_Jr7RTzfPH1jy@ep-billowing-bread-aytt03zt-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
     depends_on:
       db:
         condition: service_healthy
@@ -58,7 +58,7 @@ services:
   catalog-service:
     build: ./services/catalog-service
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - DATABASE_URL=postgresql://neondb_owner:npg_Jr7RTzfPH1jy@ep-billowing-bread-aytt03zt-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
     depends_on:
       db:
         condition: service_healthy
@@ -66,7 +66,7 @@ services:
   seats-service:
     build: ./services/seats-service
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - DATABASE_URL=postgresql://neondb_owner:npg_Jr7RTzfPH1jy@ep-billowing-bread-aytt03zt-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
       - HOLD_TTL_SECONDS=${HOLD_TTL_SECONDS:-120}
     depends_on:
       db:
@@ -75,7 +75,7 @@ services:
   bookings-service:
     build: ./services/bookings-service
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - DATABASE_URL=postgresql://neondb_owner:npg_Jr7RTzfPH1jy@ep-billowing-bread-aytt03zt-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
       - SEATS_SERVICE_URL=http://seats-service:3000
       - OTP_SERVICE_URL=http://otp-service:3000
       - PAYMENTS_SERVICE_URL=http://payments-service:3000
@@ -86,7 +86,7 @@ services:
   payments-service:
     build: ./services/payments-service
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/cinemaseat
+      - DATABASE_URL=postgresql://neondb_owner:npg_Jr7RTzfPH1jy@ep-billowing-bread-aytt03zt-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
       - GATEWAY_URL=http://mock-gateway:9000
       - CALLBACK_URL=http://api-gateway:80/webhooks/payment
       - BOOKINGS_SERVICE_URL=http://bookings-service:3000

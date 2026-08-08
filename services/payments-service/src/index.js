@@ -41,7 +41,7 @@ app.post('/payments/charge', async (req, res) => {
     `, [booking.id, idempotencyKey, booking.amount]);
     await client.query('COMMIT');
 
-    const gatewayRes = await fetch(`${GATEWAY_URL}/charge`, {
+    const gatewayRes = await fetch(`${GATEWAY_URL}/payments/charge`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',

@@ -90,6 +90,34 @@ app.post('/internal/bookings/status', async (req, res) => {
   }
 });
 
+// Get user tickets
+app.get('/bookings/my-tickets', async (req, res) => {
+  const { userId } = req.query; // In a real app, this should come from a verified JWT token middleware
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+  try {
+    const result = await pool.query(`
+      SELECT b.id, b.booking_ref, b.status, b.amount, b.created_at,
+             sh.start_time, m.title as movie_title, m.poster_url,
+             s.row_label, s.seat_number, s.tier,
+             t.name as theatre_name, sc.name as screen_name
+      FROM bookings b
+      JOIN shows sh ON b.show_id = sh.id
+      JOIN movies m ON sh.movie_id = m.id
+      JOIN seats s ON b.seat_id = s.id
+      JOIN screens sc ON s.screen_id = sc.id
+      JOIN theatres t ON sc.theatre_id = t.id
+      WHERE b.user_id = $1 AND b.status = 'CONFIRMED'
+      ORDER BY b.created_at DESC
+    `, [userId]);
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Failed to fetch tickets:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
 const PORT = process.env.PORT || 3000;

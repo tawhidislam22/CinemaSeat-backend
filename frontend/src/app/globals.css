@@ -257,3 +257,216 @@ p { margin: 0 0 1rem 0; line-height: 1.6; color: var(--text-secondary); }
   border: 1px solid var(--accent-primary);
   color: var(--accent-primary);
 }
+
+/* Auth Pages */
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+}
+
+.login-card {
+  background: var(--bg-card);
+  padding: 40px;
+  border-radius: var(--border-radius);
+  width: 100%;
+  max-width: 450px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.login-card h1 {
+  margin-bottom: 10px;
+  color: white;
+}
+
+.login-card p {
+  color: var(--text-secondary);
+  margin-bottom: 30px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--border-radius);
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: white;
+  font-size: 1rem;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.login-card .btn-primary {
+  width: 100%;
+  padding: 14px;
+  margin-top: 10px;
+  font-size: 1.1rem;
+}
+
+.auth-link {
+  text-align: center;
+  margin-top: 20px !important;
+}
+
+.auth-link a {
+  color: var(--accent-primary);
+  font-weight: bold;
+}
+
+.error-alert {
+  background: rgba(244, 24, 28, 0.1);
+  color: #ff8a8a;
+  padding: 15px;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--accent-secondary);
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+/* Dashboard */
+.dashboard-container {
+  max-width: 1000px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+.no-tickets {
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+}
+
+.tickets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 30px;
+  margin-top: 30px;
+}
+
+.ticket-card {
+  background: white;
+  color: black;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+  position: relative;
+}
+
+.ticket-header {
+  display: flex;
+  background: var(--bg-card);
+  color: white;
+  padding: 15px;
+  border-bottom: 2px dashed rgba(0,0,0,0.1);
+}
+
+.ticket-poster {
+  width: 70px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-right: 15px;
+}
+
+.ticket-movie-info h2 {
+  font-size: 1.2rem;
+  margin: 0 0 5px 0;
+  text-transform: none;
+}
+
+.ticket-time {
+  color: var(--accent-primary) !important;
+  font-weight: bold;
+  font-size: 0.9rem;
+  margin-bottom: 5px !important;
+}
+
+.ticket-venue {
+  font-size: 0.85rem;
+  color: var(--text-secondary) !important;
+}
+
+.ticket-body {
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.seat-details {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.detail-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-box span {
+  font-size: 0.75rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.detail-box strong {
+  font-size: 1.2rem;
+  color: #000;
+}
+
+.qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ref-text {
+  margin-top: 10px !important;
+  font-size: 0.7rem;
+  color: #666 !important;
+  font-family: monospace;
+}
+
+.ticket-footer {
+  background: #f5f5f5;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-badge {
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.status-badge.confirmed {
+  background: #e6f9f3;
+  color: #219653;
+}
+
+.ticket-price {
+  font-weight: bold;
+  color: #333;
+}

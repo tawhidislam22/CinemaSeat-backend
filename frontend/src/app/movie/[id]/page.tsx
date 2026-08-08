@@ -14,8 +14,8 @@ export default function MovieDetails() {
     if (!movieId) return;
     const fetchShows = async () => {
       try {
-        const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-        const res = await fetch(`${url}/api/shows/${movieId}`);
+        const url = process.env.NEXT_PUBLIC_CATALOG_URL || 'http://localhost:3001';
+        const res = await fetch(`${url}/catalog/shows/${movieId}`);
         const data = await res.json();
         setShows(data);
       } catch (err) {
